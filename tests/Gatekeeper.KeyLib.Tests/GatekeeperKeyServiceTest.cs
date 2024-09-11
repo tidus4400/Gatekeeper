@@ -1,23 +1,23 @@
 using Gatekeeper.KeyLib.Features.KeyGeneration;
 using Gatekeeper.KeyLib.Features.KeyStorage;
 using Gatekeeper.KeyLib.Models;
+using Gatekeeper.KeyLib.Errors;
 using Gatekeeper.KeyLib.Services;
-using Moq;
 
 
 namespace Gatekeeper.KeyLib.Tests.Services;
 
 public class GatekeeperKeyServiceTest
 {
-    private readonly Mock<IKeyGenerator> _mockKeyGenerator;
-    private readonly Mock<IKeyRepository> _mockKeyRepository;
+    private readonly IKeyGenerator _keyGenerator;
+    private readonly IKeyRepository _inMemoryKeyRepository;
     private readonly GatekeeperKeyService _service;
 
     public GatekeeperKeyServiceTest()
     {
-        _mockKeyGenerator = new Mock<IKeyGenerator>();
-        _mockKeyRepository = new Mock<IKeyRepository>();
-        _service = new GatekeeperKeyService(_mockKeyGenerator.Object, _mockKeyRepository.Object);
+        _keyGenerator = new KeyGenerator();
+        _inMemoryKeyRepository = new InMemoryKeyRepository();
+        _service = new GatekeeperKeyService(_keyGenerator, _inMemoryKeyRepository);
     }
 
     [Fact]
@@ -26,37 +26,61 @@ public class GatekeeperKeyServiceTest
         // Arrange
         string appId = "testAppId";
         string createdBy = "testUser";
-        string cryptoKey = "generatedCryptoKey";
-        GatekeeperKey expectedKey = new(cryptoKey, appId, createdBy, DateTime.UtcNow);
-
-        _mockKeyGenerator.Setup(x => x.GenerateCryptoKeyAsync()).ReturnsAsync(cryptoKey);
-        _mockKeyRepository.Setup(x => x.SaveKeyAsync(It.IsAny<GatekeeperKey>())).Returns(Task.CompletedTask);
 
         // Act
-        GatekeeperKey result = await _service.GenerateAndStoreKeyForAppIdAsync(appId, createdBy);
+        GkpKey result = await _service.GenerateAndStoreKeyForAppIdAsync(appId, createdBy);
 
         // Assert
-        Assert.Equal(expectedKey.AppId, result.AppId);
-        Assert.Equal(expectedKey.CreatedBy, result.CreatedBy);
-        Assert.Equal(expectedKey.Key, result.Key);
-        _mockKeyGenerator.Verify(x => x.GenerateCryptoKeyAsync(), Times.Once);
-        _mockKeyRepository.Verify(x => x.SaveKeyAsync(It.IsAny<GatekeeperKey>()), Times.Once);
+        Assert.Equal(appId, result.AppId);
+        Assert.Equal(createdBy, result.CreatedBy);
     }
 
     [Fact]
-    public async Task GetKeyForAppIdAsync_ShouldReturnKey()
+    public async Task GetKeyForAppIdAsync_ShouldReturnOk_IfKeyExistsInRepo()
     {
         // Arrange
         string appId = "testAppId";
-        GatekeeperKey expectedKey = new("cryptoKey", appId, "createdBy", DateTime.UtcNow);
+        GkpKey expectedKey = new("cryptoKey", appId, "createdBy", DateTime.UtcNow);
 
-        _mockKeyRepository.Setup(x => x.GetKeyForAppIdAsync(appId)).ReturnsAsync(expectedKey);
+        await _inMemoryKeyRepository.SaveKeyAsync(expectedKey);
 
         // Act
-        GatekeeperKey? result = await _service.GetKeyForAppIdAsync(appId);
+        GkpResult<GkpKey, GkpKeyNotFoundError> result = await _service.GetKeyForAppIdAsync(appId);
+
+        GkpKey? gkpKey = result switch
+        {
+            GkpOk<GkpKey, GkpKeyNotFoundError> => (result as GkpOk<GkpKey, GkpKeyNotFoundError>)!.Value,
+            GkpErr<GkpKey, GkpKeyNotFoundError> => null,
+            _ => null
+        };
 
         // Assert
-        Assert.Equal(expectedKey, result);
-        _mockKeyRepository.Verify(x => x.GetKeyForAppIdAsync(appId), Times.Once);
+        Assert.IsType<GkpOk<GkpKey, GkpKeyNotFoundError>>(result);
+        Assert.Equal(expectedKey, gkpKey);
+    }
+
+    [Fact]
+    public async Task GetKeyForAppIdAsync_ShouldReturnError_IfKeyNotExistsInRepo()
+    {
+        // Arrange
+        string appId = "testAppId";
+        GkpKey expectedKey = new("cryptoKey", appId, "createdBy", DateTime.UtcNow);
+
+        await _inMemoryKeyRepository.SaveKeyAsync(expectedKey);
+
+        // Act
+        GkpResult<GkpKey, GkpKeyNotFoundError> result = await _service.GetKeyForAppIdAsync("wrongAppId");
+
+        GkpKey? gkpKey = result switch
+        {
+            GkpOk<GkpKey, GkpKeyNotFoundError> => (result as GkpOk<GkpKey, GkpKeyNotFoundError>)!.Value,
+            GkpErr<GkpKey, GkpKeyNotFoundError> => null,
+            _ => null
+        };
+
+        // Assert
+        Assert.IsType<GkpErr<GkpKey, GkpKeyNotFoundError>>(result);
+        Assert.Equal("Key for appId wrongAppId not found", (result as GkpErr<GkpKey, GkpKeyNotFoundError>)!.Error.Message);
+        Assert.Null(gkpKey);
     }
 }

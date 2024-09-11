@@ -1,6 +1,7 @@
 using Gatekeeper.KeyLib.Features.KeyGeneration;
 using Gatekeeper.KeyLib.Features.KeyStorage;
 using Gatekeeper.KeyLib.Models;
+using Gatekeeper.KeyLib.Errors;
 
 namespace Gatekeeper.KeyLib.Services;
 
@@ -15,19 +16,31 @@ public sealed class GatekeeperKeyService
         _keyRepository = keyRepository;
     }
 
-    public async Task<GatekeeperKey> GenerateAndStoreKeyForAppIdAsync(string appId, string createdBy)
+    public async Task<GkpKey> GenerateAndStoreKeyForAppIdAsync(string appId, string createdBy)
     {
         string cryptoKey = await _keyGenerator.GenerateCryptoKeyAsync();
 
-        GatekeeperKey gatekeeperKey = new(cryptoKey, appId, createdBy, DateTime.UtcNow);
+        GkpKey gatekeeperKey = new(cryptoKey, appId, createdBy, DateTime.UtcNow);
 
         await _keyRepository.SaveKeyAsync(gatekeeperKey);
 
         return gatekeeperKey;
     }
 
-    public async Task<GatekeeperKey?> GetKeyForAppIdAsync(string appId)
+    public async Task<GkpResult<GkpKey, GkpKeyNotFoundError>> GetKeyForAppIdAsync(string appId)
     {
-        return await _keyRepository.GetKeyForAppIdAsync(appId);
+        if (string.IsNullOrWhiteSpace(appId))
+        {
+            return new GkpErr<GkpKey, GkpKeyNotFoundError>(new GkpKeyNotFoundError("AppId cannot be null or empty"));
+        }
+
+        GkpKey? retrievedKey = await _keyRepository.GetKeyForAppIdAsync(appId);
+
+        if (retrievedKey is null)
+        {
+            return new GkpErr<GkpKey, GkpKeyNotFoundError>(new GkpKeyNotFoundError($"Key for appId {appId} not found"));
+        }
+
+        return new GkpOk<GkpKey, GkpKeyNotFoundError>(retrievedKey);
     }
 }
