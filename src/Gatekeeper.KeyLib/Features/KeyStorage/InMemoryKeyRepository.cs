@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 
 using Gatekeeper.KeyLib.Models;
 
-
 namespace Gatekeeper.KeyLib.Features.KeyStorage;
 
 public sealed class InMemoryKeyRepository : IKeyRepository

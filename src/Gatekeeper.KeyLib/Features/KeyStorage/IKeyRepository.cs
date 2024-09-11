@@ -1,6 +1,5 @@
 using Gatekeeper.KeyLib.Models;
 
-
 namespace Gatekeeper.KeyLib.Features.KeyStorage;
 
 public interface IKeyRepository

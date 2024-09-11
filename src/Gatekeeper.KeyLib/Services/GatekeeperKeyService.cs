@@ -1,7 +1,6 @@
 using Gatekeeper.KeyLib.Features.KeyGeneration;
 using Gatekeeper.KeyLib.Features.KeyStorage;
 using Gatekeeper.KeyLib.Models;
-using Gatekeeper.KeyLib.Errors;
 
 namespace Gatekeeper.KeyLib.Services;
 
@@ -27,20 +26,20 @@ public sealed class GatekeeperKeyService
         return gatekeeperKey;
     }
 
-    public async Task<GkpResult<GkpKey, GkpKeyNotFoundError>> GetKeyForAppIdAsync(string appId)
+    public async Task<(GkpKey?, Exception?)> GetKeyForAppIdAsync(string appId)
     {
         if (string.IsNullOrWhiteSpace(appId))
         {
-            return new GkpErr<GkpKey, GkpKeyNotFoundError>(new GkpKeyNotFoundError("AppId cannot be null or empty"));
+            return (null, new ArgumentNullException(nameof(appId)));
         }
 
         GkpKey? retrievedKey = await _keyRepository.GetKeyForAppIdAsync(appId);
 
         if (retrievedKey is null)
         {
-            return new GkpErr<GkpKey, GkpKeyNotFoundError>(new GkpKeyNotFoundError($"Key for appId {appId} not found"));
+            return (null, new KeyNotFoundException($"Key not found for appId: {appId}"));
         }
 
-        return new GkpOk<GkpKey, GkpKeyNotFoundError>(retrievedKey);
+        return (retrievedKey, null);
     }
 }

@@ -1,9 +1,7 @@
 using Gatekeeper.KeyLib.Features.KeyGeneration;
 using Gatekeeper.KeyLib.Features.KeyStorage;
 using Gatekeeper.KeyLib.Models;
-using Gatekeeper.KeyLib.Errors;
 using Gatekeeper.KeyLib.Services;
-
 
 namespace Gatekeeper.KeyLib.Tests.Services;
 
@@ -45,18 +43,12 @@ public class GatekeeperKeyServiceTest
         await _inMemoryKeyRepository.SaveKeyAsync(expectedKey);
 
         // Act
-        GkpResult<GkpKey, GkpKeyNotFoundError> result = await _service.GetKeyForAppIdAsync(appId);
-
-        GkpKey? gkpKey = result switch
-        {
-            GkpOk<GkpKey, GkpKeyNotFoundError> => (result as GkpOk<GkpKey, GkpKeyNotFoundError>)!.Value,
-            GkpErr<GkpKey, GkpKeyNotFoundError> => null,
-            _ => null
-        };
+        (GkpKey? key, Exception? err) = await _service.GetKeyForAppIdAsync(appId);
 
         // Assert
-        Assert.IsType<GkpOk<GkpKey, GkpKeyNotFoundError>>(result);
-        Assert.Equal(expectedKey, gkpKey);
+        Assert.Null(err);
+        Assert.Equal(expectedKey, key);
+
     }
 
     [Fact]
@@ -69,18 +61,12 @@ public class GatekeeperKeyServiceTest
         await _inMemoryKeyRepository.SaveKeyAsync(expectedKey);
 
         // Act
-        GkpResult<GkpKey, GkpKeyNotFoundError> result = await _service.GetKeyForAppIdAsync("wrongAppId");
-
-        GkpKey? gkpKey = result switch
-        {
-            GkpOk<GkpKey, GkpKeyNotFoundError> => (result as GkpOk<GkpKey, GkpKeyNotFoundError>)!.Value,
-            GkpErr<GkpKey, GkpKeyNotFoundError> => null,
-            _ => null
-        };
+        (GkpKey? key, Exception? err) = await _service.GetKeyForAppIdAsync("wrongAppId");
 
         // Assert
-        Assert.IsType<GkpErr<GkpKey, GkpKeyNotFoundError>>(result);
-        Assert.Equal("Key for appId wrongAppId not found", (result as GkpErr<GkpKey, GkpKeyNotFoundError>)!.Error.Message);
-        Assert.Null(gkpKey);
+        Assert.NotNull(err);
+        Assert.IsType<KeyNotFoundException>(err);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => throw err!);
+
     }
 }
